@@ -27,41 +27,50 @@ async function loginHanime(email, password) {
         const res = await axios.post("https://hanime.tv/api/v1/auth/login", {
             email,
             password
-        });
+        }, { timeout: 10000 });
         return res.data.session_token || res.data.token;
     } catch (e) {
+        console.error("Login error:", e.message);
         return null;
     }
 }
 
 builder.defineCatalogHandler(async ({ id }) => {
-    let sort = "trending";
-    if (id === "recent") sort = "recent";
-    if (id === "most-views") sort = "most_views";
+    try {
+        let sort = "trending";
+        if (id === "recent") sort = "recent";
+        if (id === "most-views") sort = "most_views";
 
-    const res = await axios.get(`https://hanime.tv/api/v1/videos?sort=${sort}`);
-    const metas = res.data.videos.map(v => ({
-        id: `hanime:${v.slug}`,
-        type: "movie",
-        name: v.name,
-        poster: v.cover_url,
-        background: v.poster_url,
-        description: v.description || "",
-        genres: v.tags || []
-    }));
-    return { metas };
+        const res = await axios.get(`https://hanime.tv/api/v1/videos?sort=${sort}`, { timeout: 10000 });
+        const metas = (res.data.videos || []).map(v => ({
+            id: `hanime:${v.slug}`,
+            type: "movie",
+            name: v.name,
+            poster: v.cover_url,
+            background: v.poster_url,
+            description: v.description || "",
+            genres: v.tags || []
+        }));
+        return { metas };
+    } catch (e) {
+        console.error("Catalog error:", e.message);
+        return { metas: [] };
+    }
 });
 
 builder.defineStreamHandler(async ({ id, config }) => {
-    if (!config?.email || !config?.password) return { streams: [] };
-
-    const slug = id.replace("hanime:", "");
-    const token = await loginHanime(config.email, config.password);
-    if (!token) return { streams: [] };
-
     try {
+        if (!config?.email || !config?.password) {
+            return { streams: [] };
+        }
+
+        const slug = id.replace("hanime:", "");
+        const token = await loginHanime(config.email, config.password);
+        if (!token) return { streams: [] };
+
         const res = await axios.get(`https://hanime.tv/api/v1/videos/${slug}`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 10000
         });
 
         const streams = (res.data.streams || []).map(s => ({
@@ -70,6 +79,7 @@ builder.defineStreamHandler(async ({ id, config }) => {
         }));
         return { streams };
     } catch (e) {
+        console.error("Stream error:", e.message);
         return { streams: [] };
     }
 });
@@ -77,9 +87,4 @@ builder.defineStreamHandler(async ({ id, config }) => {
 const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
 
-module.exports = (req, res) => {
-    router(req, res, () => {
-        res.statusCode = 404;
-        res.end();
-    });
-};
+module.exports = router;
