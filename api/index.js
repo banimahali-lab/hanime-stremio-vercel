@@ -1,4 +1,4 @@
-const { addonBuilder, getRouter } = require("stremio-addon-sdk");
+const { addonBuilder } = require("stremio-addon-sdk");
 const axios = require("axios");
 
 const manifest = {
@@ -6,7 +6,7 @@ const manifest = {
     version: "1.0.0",
     name: "Hanime (Personal)",
     description: "My personal Hanime.tv addon",
-    resources: ["catalog", "stream"],   // ← removed "meta"
+    resources: ["catalog", "stream"],
     types: ["movie"],
     catalogs: [
         { type: "movie", id: "trending", name: "Trending" },
@@ -14,6 +14,9 @@ const manifest = {
         { type: "movie", id: "most-views", name: "Most Views" }
     ],
     idPrefixes: ["hanime"],
+    behaviorHints: {
+        configurable: true   // ← This fixes the warning
+    },
     config: [
         { key: "email", type: "text", title: "Hanime Email", required: true },
         { key: "password", type: "password", title: "Hanime Password", required: true }
@@ -84,7 +87,5 @@ builder.defineStreamHandler(async ({ id, config }) => {
     }
 });
 
-const addonInterface = builder.getInterface();
-const router = getRouter(addonInterface);
-
-module.exports = router;
+// Export the AddonInterface (this fixes the error)
+module.exports = builder.getInterface();
