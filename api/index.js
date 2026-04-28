@@ -6,7 +6,7 @@ const manifest = {
     version: "1.0.0",
     name: "Hanime (Personal)",
     description: "My personal Hanime.tv addon",
-    resources: ["catalog", "meta", "stream"],
+    resources: ["catalog", "stream"],   // ← removed "meta"
     types: ["movie"],
     catalogs: [
         { type: "movie", id: "trending", name: "Trending" },
