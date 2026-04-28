@@ -2,58 +2,59 @@ const { addonBuilder } = require("stremio-addon-sdk");
 const axios = require("axios");
 
 const manifest = {
-    id: "com.personal.hanime",
+    id: "com.personal.rule34",
     version: "1.0.0",
-    name: "Hanime (Personal)",
-    description: "My personal Hanime.tv addon",
+    name: "Rule34 Hentai",
+    description: "Free hentai from rule34.xxx",
     resources: ["catalog", "stream"],
     types: ["movie"],
     catalogs: [
-        { type: "movie", id: "trending", name: "Trending" },
+        { type: "movie", id: "popular", name: "Popular" },
         { type: "movie", id: "recent", name: "Recent" },
-        { type: "movie", id: "most-views", name: "Most Views" }
+        { type: "movie", id: "hentai", name: "Hentai" },
+        { type: "movie", id: "big-tits", name: "Big Tits" },
+        { type: "movie", id: "ahegao", name: "Ahegao" }
     ],
-    idPrefixes: ["hanime"],
-    behaviorHints: {
-        configurable: true   // ← This fixes the warning
-    },
-    config: [
-        { key: "email", type: "text", title: "Hanime Email", required: true },
-        { key: "password", type: "password", title: "Hanime Password", required: true }
-    ]
+    idPrefixes: ["r34"],
+    behaviorHints: { configurable: false }
 };
 
 const builder = new addonBuilder(manifest);
 
-async function loginHanime(email, password) {
-    try {
-        const res = await axios.post("https://hanime.tv/api/v1/auth/login", {
-            email,
-            password
-        }, { timeout: 10000 });
-        return res.data.session_token || res.data.token;
-    } catch (e) {
-        console.error("Login error:", e.message);
-        return null;
-    }
-}
-
 builder.defineCatalogHandler(async ({ id }) => {
     try {
-        let sort = "trending";
-        if (id === "recent") sort = "recent";
-        if (id === "most-views") sort = "most_views";
+        let tags = "";
 
-        const res = await axios.get(`https://hanime.tv/api/v1/videos?sort=${sort}`, { timeout: 10000 });
-        const metas = (res.data.videos || []).map(v => ({
-            id: `hanime:${v.slug}`,
+        if (id === "popular") tags = "score:>100";
+        if (id === "recent") tags = "sort:random";
+        if (id === "hentai") tags = "hentai";
+        if (id === "big-tits") tags = "big_breasts";
+        if (id === "ahegao") tags = "ahegao";
+
+        const res = await axios.get(`https://api.rule34.xxx/index.php`, {
+            params: {
+                page: "dapi",
+                s: "post",
+                q: "index",
+                json: 1,
+                tags: tags,
+                limit: 20
+            },
+            timeout: 15000
+        });
+
+        const posts = res.data || [];
+
+        const metas = posts.map(post => ({
+            id: `r34:${post.id}`,
             type: "movie",
-            name: v.name,
-            poster: v.cover_url,
-            background: v.poster_url,
-            description: v.description || "",
-            genres: v.tags || []
+            name: post.tags ? post.tags.split(" ").slice(0, 3).join(" ") : "Rule34 Post",
+            poster: post.preview_url || post.sample_url,
+            background: post.sample_url || post.file_url,
+            description: `Tags: ${post.tags || "No tags"}`,
+            genres: post.tags ? post.tags.split(" ").slice(0, 5) : []
         }));
+
         return { metas };
     } catch (e) {
         console.error("Catalog error:", e.message);
@@ -61,25 +62,38 @@ builder.defineCatalogHandler(async ({ id }) => {
     }
 });
 
-builder.defineStreamHandler(async ({ id, config }) => {
+builder.defineStreamHandler(async ({ id }) => {
     try {
-        if (!config?.email || !config?.password) {
-            return { streams: [] };
-        }
+        const postId = id.replace("r34:", "");
 
-        const slug = id.replace("hanime:", "");
-        const token = await loginHanime(config.email, config.password);
-        if (!token) return { streams: [] };
-
-        const res = await axios.get(`https://hanime.tv/api/v1/videos/${slug}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: 10000
+        const res = await axios.get(`https://api.rule34.xxx/index.php`, {
+            params: {
+                page: "dapi",
+                s: "post",
+                q: "index",
+                json: 1,
+                id: postId
+            },
+            timeout: 15000
         });
 
-        const streams = (res.data.streams || []).map(s => ({
-            url: s.url,
-            title: `${s.resolution}p`
-        }));
+        const post = res.data && res.data[0];
+        if (!post || !post.file_url) return { streams: [] };
+
+        const streams = [{
+            url: post.file_url,
+            title: "Original Quality",
+            behaviorHints: { bingeGroup: "r34" }
+        }];
+
+        // Add sample version if available
+        if (post.sample_url && post.sample_url !== post.file_url) {
+            streams.push({
+                url: post.sample_url,
+                title: "Sample Quality"
+            });
+        }
+
         return { streams };
     } catch (e) {
         console.error("Stream error:", e.message);
@@ -87,5 +101,4 @@ builder.defineStreamHandler(async ({ id, config }) => {
     }
 });
 
-// Export the AddonInterface (this fixes the error)
 module.exports = builder.getInterface();
